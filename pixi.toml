@@ -5,13 +5,10 @@ description = "MaNIAC Lab ML platform environment"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 
-[feature.ml]
+[feature.mlbase]
 platforms = ["linux-64"]
 
-[feature.ml.system-requirements]
-cuda = "13.0"
-
-[feature.ml.dependencies]
+[feature.mlbase.dependencies]
 # Python
 python = "==3.12"
 pixi-kernel = "*"
@@ -23,7 +20,6 @@ root = "*"
 openjdk = "*"
 
 # ML frameworks
-tensorflow-gpu = "*"
 keras = "*"
 
 # Data science
@@ -85,7 +81,7 @@ pillow = "*"
 tqdm = "*"
 imageio = "*"
 
-[feature.ml.pypi-dependencies]
+[feature.mlbase.pypi-dependencies]
 # Packages NOT on conda-forge (or easier from PyPI)
 tensorflow-datasets = "*"
 keras-tuner = "*"
@@ -99,6 +95,15 @@ dask-labextension = "*"
 atlasify = "*"
 rucio-jupyterlab = "*"
 
+[feature.mlgpu.system-requirements]
+cuda = "13.0"
+
+[feature.mlcpu.dependencies]
+tensorflow = "*"
+
+[feature.mlgpu.dependencies]
+tensorflow-gpu = "*"
+
 [feature.dev.dependencies]
 python = "==3.11"
 tbump = "*"
@@ -109,4 +114,5 @@ bump = { cmd = "tbump $(date +\"%Y.%-m.%-d\")", description = "Run tbump with cu
 
 [environments]
 dev = ["dev"]
-ml = ["ml"]
+mlcpu = ["mlbase", "mlcpu"]
+ml = ["mlbase", "mlgpu"]
