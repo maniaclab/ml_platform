@@ -323,4 +323,4 @@ singularity run --nv --bind /usr/lib/x86_64-linux-gnu:/host-libs ml-platform_mai
 
 ## License
 
-[Add license information here]
+MIT License
