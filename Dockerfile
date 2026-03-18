@@ -1,5 +1,5 @@
 ARG CUDA_VERSION="12.8"
-ARG ENVIRONMENT="ml"
+ARG ENVIRONMENT="mlgpu"
 
 # ============================================================
 # Stage 1: Build - install all dependencies via pixi
