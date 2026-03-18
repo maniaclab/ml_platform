@@ -114,5 +114,5 @@ bump = { cmd = "tbump $(date +\"%Y.%-m.%-d\")", description = "Run tbump with cu
 
 [environments]
 dev = ["dev"]
-ml = ["mlbase", "mlcpu"]
-mlgpu = ["mlbase", "mlgpu"]
+mlcpu = ["mlbase", "mlcpu"]
+ml = ["mlbase", "mlgpu"]
