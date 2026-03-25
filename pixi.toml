@@ -1,6 +1,6 @@
 [workspace]
 name = "ml-platform"
-version = "2026.3.18"
+version = "2026.3.25"
 description = "MaNIAC Lab ML platform environment"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]

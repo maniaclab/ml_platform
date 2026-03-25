@@ -1,7 +1,7 @@
 github_url = "https://github.com/maniaclab/ml_platform/"
 
 [version]
-current = "2026.3.18"
+current = "2026.3.25"
 
 # CalVer format: YYYY.MM.DD
 # This regex matches dates like 2026.02.19
