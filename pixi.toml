@@ -42,12 +42,15 @@ graphviz = "*"
 jupyter = "*"
 jupyterlab_server = "*"
 jupyterlab = "*"
+jupyter_client = ">=8.6.3"
 
 ipykernel = "*"
 metakernel = "*"
 ipywidgets = "*"
 jupyterlab-git = "*"
 rise = "*"
+jupyter-collaboration = "*"
+pycrdt = "*"
 
 # HEP
 uproot = "*"
@@ -91,6 +94,7 @@ gymnasium = "*"          # gym is deprecated, gymnasium is the successor
 JSAnimation = "*"
 dask-labextension = "*"
 atlasify = "*"
+jupyter-mcp-server = ">=1.0.0"
 
 [feature.mlgpu.system-requirements]
 cuda = "13.0"
