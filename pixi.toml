@@ -91,9 +91,7 @@ jupyter-bokeh = "*"
 qtpy = "*"
 elasticsearch = "*"
 gymnasium = "*"          # gym is deprecated, gymnasium is the successor
-JSAnimation = "*"
 dask-labextension = "*"
-atlasify = "*"
 jupyter-mcp-server = ">=1.0.0"
 
 [feature.mlgpu.system-requirements]
