@@ -9,6 +9,7 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 platforms = ["linux-64"]
 
 [feature.mlbase.dependencies]
+
 # Python
 python = "==3.12"
 pixi-kernel = "*"
@@ -20,80 +21,78 @@ root = "*"
 openjdk = "*"
 
 # ML frameworks
+gymnasium = "*"
 keras = "*"
+keras-tuner = "*"
+tensorflow-datasets = "*"
 
 # Data science
+cython = "*"
+h5py = "*"
 numpy = "*"
 pandas = "*"
-scipy = "*"
-scikit-learn = "*"
 pyarrow = "*"
-h5py = "*"
 pytables = "*"
-cython = "*"
+scikit-learn = "*"
+scipy = "*"
 
 # Visualization
-matplotlib = "*"
-seaborn = "*"
 bokeh = "*"
 graphviz = "*"
+matplotlib = "*"
+seaborn = "*"
 
 # Jupyter ecosystem
-jupyter = ">=1.1.1,<2"
-jupyterlab_server = ">2.0.1,<3"  # rucio-jupyterlab
-jupyterlab = ">=4,<5"  # rucio-jupyterlab
-notebook = "<7"  # rucio-jupyterlab
-
+dask-labextension = "*"
 ipykernel = "*"
-metakernel = "*"
 ipywidgets = "*"
+jupyter = "*"
+jupyter_bokeh = "*"
+jupyter-collaboration = "*"
+jupyter_client = ">=8.6.3"
+jupyterlab = "*"
 jupyterlab-git = "*"
+jupyterlab_server = "*"
+metakernel = "*"
+pycrdt = "*"
 rise = "*"
 
 # HEP
 uproot = "*"
-rucio-clients = ">=32.0"  # rucio-jupyterlab
 
 # System tools
-curl = "*"
-wget = "*"
-unzip = "*"
-zip = "*"
-vim = "*"
-jq = "*"
-rsync = "*"
-git = "*"
-make = "*"
 compilers = "*"
+curl = "*"
+git = "*"
+jq = "*"
+make = "*"
 pkg-config = "*"
+rsync = "*"
+unzip = "*"
+vim = "*"
+wget = "*"
+zip = "*"
 
 # Libraries
 freetype = "*"
-libpng = "*"
-zeromq = "*"
 hdf5 = "*"
+libpng = "*"
 tbb = "*"
+zeromq = "*"
 zlib = "*"
 
 # Other
-requests = "*"
-pillow = "*"
-tqdm = "*"
+elasticsearch = "*"
 imageio = "*"
+plumbum = "*"
+pillow = "*"
+qtpy = "*"
+requests = "*"
+tqdm = "*"
 
 [feature.mlbase.pypi-dependencies]
 # Packages NOT on conda-forge (or easier from PyPI)
-tensorflow-datasets = "*"
-keras-tuner = "*"
-plumbum = "*"
-jupyter-bokeh = "*"
-qtpy = "*"
-elasticsearch = "*"
-gymnasium = "*"          # gym is deprecated, gymnasium is the successor
-JSAnimation = "*"
-dask-labextension = "*"
-atlasify = "*"
-rucio-jupyterlab = "*"
+jupyter-mcp-server = ">=1.0.0"
 
 [feature.mlgpu.system-requirements]
 cuda = "13.0"
