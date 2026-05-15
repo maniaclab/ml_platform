@@ -44,7 +44,7 @@ COPY --from=build --chmod=0755 /app/entrypoint.sh /app/entrypoint.sh
 COPY config/jupyter_notebook_config.py /usr/local/etc/jupyter_notebook_config.py
 COPY --chmod=0755 config/SetupPrivateJupyterLab.sh /usr/local/bin/SetupPrivateJupyterLab.sh
 
-RUN pixi self-update --version 0.65.0
+RUN pixi self-update --version 0.68.1
 
 # Singularity/Apptainer host GPU driver compatibility
 # see https://github.com/singularityware/singularity/issues/611
