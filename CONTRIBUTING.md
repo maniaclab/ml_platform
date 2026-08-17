@@ -32,14 +32,25 @@ This installs the `dev` environment which includes:
 
 Dependencies are managed via Pixi and split into features:
 
-- **ml feature** (production): All ML packages, ROOT, Jupyter, etc.
+- **mlbase feature** (production, shared): All ML packages, ROOT, Jupyter, etc. Used by both the `ml`
+  (GPU) and `mlcpu` (CPU) environments.
+- **mlgpu / mlcpu features**: environment-specific bits layered on top of `mlbase` — `mlgpu` adds the
+  `cuda = "13.0"` system-requirement and `tensorflow-gpu`; `mlcpu` adds plain `tensorflow`.
 - **dev feature** (development): tbump and other dev tools
+
+The repository builds **two separate images** from the same `Dockerfile` and `pixi.toml`, via
+build-args (see `CLAUDE.md`):
+
+| Image | `BASE_IMAGE` | `PIXI_ENVIRONMENT` |
+|---|---|---|
+| `ml-platform-gpu` | `ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0` | `ml` |
+| `ml-platform-cpu` | `ghcr.io/prefix-dev/pixi:noble` | `mlcpu` |
 
 To add a dependency:
 
 1. Edit `pixi.toml`:
    ```toml
-   [feature.ml.dependencies]
+   [feature.mlbase.dependencies]
    new-package = "*"
    ```
 
@@ -48,10 +59,13 @@ To add a dependency:
    CONDA_OVERRIDE_CUDA=12.6 pixi install
    ```
 
-3. Test the changes:
+3. Test the changes (both images, since a new dependency might not resolve identically on both bases):
    ```bash
-   docker build -t ml-platform:test .
-   docker run --rm ml-platform:test python -c "import new_package"
+   docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+     --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+   docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+     --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
+   docker run --rm ml-platform-cpu:test python -c "import new_package"
    ```
 
 4. Commit both files:
@@ -64,34 +78,41 @@ To add a dependency:
 
 ### Testing Locally
 
-Before committing changes that affect the Docker image:
+Before committing changes that affect the Docker image, build and test **both** variants:
 
 ```bash
-# Build the image
-docker build --platform linux/amd64 -t ml-platform:test .
+# Build both images
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Test Python environment
-docker run --rm ml-platform:test python --version
+docker run --rm ml-platform-cpu:test python --version
 
 # Test key packages
-docker run --rm ml-platform:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
+docker run --rm ml-platform-cpu:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
 
 # Test ROOT
-docker run --rm ml-platform:test root --version
+docker run --rm ml-platform-cpu:test root --version
 
 # Test Jupyter
-docker run --rm ml-platform:test jupyter --version
+docker run --rm ml-platform-cpu:test jupyter --version
 
 # Interactive shell for manual testing
-docker run --rm -it ml-platform:test bash
+docker run --rm -it ml-platform-cpu:test bash
 ```
+
+Repeat the same checks against `ml-platform-gpu:test`.
 
 ### Testing with GPU
 
-If you have GPU access:
+If you have GPU access, test the GPU image:
 
 ```bash
-docker run --rm --gpus all ml-platform:test python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+docker run --rm --gpus all ml-platform-gpu:test python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
 
 ## Version Management and Releases
@@ -131,8 +152,8 @@ pixi run -e dev tbump current-version
 ### What Happens After a Release
 
 When you push a tag (e.g., `v2026.2.19`), GitHub Actions will:
-1. Build the Docker image
-2. Push to all registries with tags:
+1. Build **both** `ml-platform-gpu` and `ml-platform-cpu` (matrix job)
+2. Push each to all registries with tags:
    - `2026.2.19` (full CalVer)
    - `2026.2` (year-month)
    - `latest`
@@ -150,9 +171,10 @@ When you push a tag (e.g., `v2026.2.19`), GitHub Actions will:
    # Make changes
    vim pixi.toml
 
-   # Test
-   docker build -t ml-platform:test .
-   docker run --rm ml-platform:test python -c "import your_package"
+   # Test (both images — see "Testing Locally" above)
+   docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+     --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
+   docker run --rm ml-platform-cpu:test python -c "import your_package"
    ```
 
 3. **Commit your changes:**
@@ -207,17 +229,20 @@ on systems with multiple GPUs.
 
 ### Update Base Image
 
+Both the GPU and CPU base images come from the same `ghcr.io/prefix-dev/pixi` project but are
+different tags (`noble-cuda-13.0.0` vs `noble`) — check both for new versions and keep their pixi
+versions reasonably in sync where possible.
+
 ```bash
-# Edit Dockerfile
-vim Dockerfile
-# Change FROM lines to new version
+# Update the default ARG values in Dockerfile, or just override at build time to test a bump:
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.1.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
-# Test locally
-docker build -t ml-platform:test .
-
-# Commit
-git add Dockerfile
-git commit -m "chore: update base image to pixi:noble-cuda-13.1.0"
+# Commit (update the Dockerfile ARG defaults and the workflow matrix's base_image values together)
+git add Dockerfile .github/workflows/build-images.yaml
+git commit -m "chore: update GPU base image to pixi:noble-cuda-13.1.0"
 ```
 
 ### Update Python Version
@@ -230,8 +255,11 @@ vim pixi.toml
 # Regenerate lock file
 CONDA_OVERRIDE_CUDA=12.6 pixi install
 
-# Test locally
-docker build -t ml-platform:test .
+# Test locally (both images)
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Commit
 git add pixi.toml pixi.lock
@@ -248,8 +276,9 @@ vim config/your_config.py
 vim Dockerfile
 # Add: COPY config/your_config.py /path/in/container/
 
-# Test
-docker build -t ml-platform:test .
+# Test (both images)
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Commit
 git add config/your_config.py Dockerfile

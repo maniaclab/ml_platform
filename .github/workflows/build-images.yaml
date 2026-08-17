@@ -21,7 +21,18 @@ jobs:
       contents: read
       packages: write # push images to ghcr.io
 
-    name: Build ml_platform
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: gpu
+            base_image: ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0
+            pixi_environment: ml
+          - variant: cpu
+            base_image: ghcr.io/prefix-dev/pixi:noble
+            pixi_environment: mlcpu
+
+    name: Build ml_platform (${{ matrix.variant }})
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,9 +69,9 @@ jobs:
         id: meta
         with:
           images: |-
-            ghcr.io/maniaclab/ml-platform
-            docker.io/ivukotic/ml_platform
-            hub.opensciencegrid.org/usatlas/ml-platform
+            ghcr.io/maniaclab/ml-platform-${{ matrix.variant }}
+            docker.io/ivukotic/ml_platform-${{ matrix.variant }}
+            hub.opensciencegrid.org/usatlas/ml-platform-${{ matrix.variant }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
@@ -74,7 +85,10 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          build-args: CUDA_VERSION=12.6
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            PIXI_ENVIRONMENT=${{ matrix.pixi_environment }}
+            CUDA_VERSION=12.6
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

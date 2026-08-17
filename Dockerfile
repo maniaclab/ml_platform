@@ -1,18 +1,19 @@
+ARG BASE_IMAGE="ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0"
 ARG CUDA_VERSION="12.8"
-ARG ENVIRONMENT="ml"
+ARG PIXI_ENVIRONMENT="ml"
 
 # ============================================================
-# Stage 1: Build - install all dependencies via pixi
+# Stage 1: Build - install dependencies via pixi
 # ============================================================
-FROM ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 AS build
+FROM ${BASE_IMAGE} AS build
 
 ARG CUDA_VERSION
-ARG ENVIRONMENT
+ARG PIXI_ENVIRONMENT
 
 WORKDIR /app
 COPY pixi.toml pixi.lock ./
 ENV CONDA_OVERRIDE_CUDA=$CUDA_VERSION
-RUN pixi install --manifest-path /app/pixi.toml --locked --environment $ENVIRONMENT
+RUN pixi install --manifest-path /app/pixi.toml --locked --environment $PIXI_ENVIRONMENT
 
 # Generate entrypoint from pixi shell-hook
 RUN echo "#!/bin/bash" > /app/entrypoint.sh && \
@@ -21,20 +22,21 @@ RUN echo "#!/bin/bash" > /app/entrypoint.sh && \
     echo "JUPYTER_DATA_DIR=/app/.jupyter/data" >> /app/entrypoint.sh && \
     echo "JUPYTER_RUNTIME_DIR=/app/.jupyter/runtime" >> /app/entrypoint.sh && \
     pixi shell-hook --manifest-path /app/pixi.toml \
-                    --environment $ENVIRONMENT -s bash >> /app/entrypoint.sh && \
+                    --environment $PIXI_ENVIRONMENT -s bash >> /app/entrypoint.sh && \
+    echo 'export PIXI_KERNEL_DEFAULT_ENVIRONMENT="$PIXI_ENVIRONMENT_NAME"' >> /app/entrypoint.sh && \
     echo 'exec "$@"' >> /app/entrypoint.sh
 
 # ============================================================
 # Stage 2: Final runtime image
 # ============================================================
-FROM ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 AS final
+FROM ${BASE_IMAGE} AS final
 
-ARG ENVIRONMENT
+ARG PIXI_ENVIRONMENT
 
 WORKDIR /app
 
 # Copy pixi environment (the only large layer)
-COPY --from=build /app/.pixi/envs/$ENVIRONMENT /app/.pixi/envs/$ENVIRONMENT
+COPY --from=build --chmod=0777 /app/.pixi/envs/$PIXI_ENVIRONMENT /app/.pixi/envs/$PIXI_ENVIRONMENT
 COPY --from=build /app/pixi.toml /app/pixi.toml
 COPY --from=build /app/pixi.lock /app/pixi.lock
 COPY --from=build /app/.pixi/.gitignore /app/.pixi/.gitignore
@@ -55,7 +57,7 @@ RUN mkdir -p /workspace
 # match jupyter configuration
 RUN mkdir -p /app/.jupyter/{config,data,runtime} && \
     chmod -R a+rwx /app/.jupyter && \
-    chmod -R a+rwx /app/.pixi && \
+    chmod 0777 /app/.pixi && \
     chmod a+rwx /app/pixi.toml /app/pixi.lock
 
 # User sync script (MaNIAC Lab infrastructure)
@@ -69,5 +71,7 @@ ENV PYTHONNOUSERSITE=1
 ENV JUPYTER_CONFIG_DIR=/app/.jupyter/config
 ENV JUPYTER_DATA_DIR=/app/.jupyter/data
 ENV JUPYTER_RUNTIME_DIR=/app/.jupyter/runtime
+# Prevent pixi from touching pixi.lock/repodata at runtime
+ENV PIXI_FROZEN=true
 
 ENTRYPOINT ["/app/entrypoint.sh"]

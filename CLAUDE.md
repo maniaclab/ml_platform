@@ -24,24 +24,49 @@ git add pixi.toml pixi.lock  # Commit both
 - Delete or gitignore `pixi.lock` (it ensures reproducibility)
 - Modify `pixi.lock` manually
 
-### 2. Pixi Environments
+### 2. Pixi Environments and Two Separate Images
 
-The repository uses Pixi environments to separate concerns:
+The repository builds **two separate images** from the same `Dockerfile` and `pixi.toml`, parameterized
+by build args:
 
-- **ml environment** (production): All ML packages, ROOT, Jupyter, etc. Used by the Docker image.
-- **dev environment** (development): Python 3.11, tbump for versioning, development tools. Used locally for version management.
+- **`ml-platform-gpu`**: `BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0`,
+  `PIXI_ENVIRONMENT=ml` (feature `mlbase` + `mlgpu`; declares `cuda = "13.0"` as a
+  `system-requirements`, depends on `tensorflow-gpu`).
+- **`ml-platform-cpu`**: `BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble` (no CUDA in the base image at all),
+  `PIXI_ENVIRONMENT=mlcpu` (feature `mlbase` + `mlcpu`; no `cuda` system-requirement, depends on plain
+  `tensorflow`).
+- **dev environment** (development, not shipped in either image): Python 3.11, tbump for versioning.
+  Used locally for version management.
+
+Each image only ever installs and ships the *one* environment it was built for — there is no runtime
+GPU probing or environment dispatcher. This is deliberate: shipping the GPU environment's dependencies
+in a plain (non-CUDA) base image would still work for imports, but shipping the *CUDA base image* for a
+CPU-only deployment is what caused the original bug (see git history) — that base image bakes
+`NVIDIA_REQUIRE_CUDA` into `ENV`, so container runtimes with `default-runtime: nvidia` enforce a driver
+version check even when no GPU is requested. Using the plain `noble` base for the CPU image avoids that
+class of failure structurally, not just via `pixi`-level workarounds.
 
 When modifying dependencies:
-- Add production packages to `[feature.ml.dependencies]` or `[feature.ml.pypi-dependencies]`
+- Add shared production packages to `[feature.mlbase.dependencies]` or `[feature.mlbase.pypi-dependencies]`
+- Add GPU-only packages to `[feature.mlgpu.dependencies]`, CPU-only packages to `[feature.mlcpu.dependencies]`
 - Add development tools to `[feature.dev.dependencies]`
 
-The Dockerfile uses `ENVIRONMENT="ml"` to install the production environment.
+Test both images locally, since they build independently and can diverge:
+```bash
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
+```
 
 ### 3. Dockerfile Commands
 
 **ALWAYS prefix commands with `/app/entrypoint.sh` in the final stage.**
 
-The entrypoint activates the Pixi environment. Without it, tools like `curl`, `git`, `python` won't be in PATH.
+The entrypoint activates the Pixi environment (a plain `pixi shell-hook` script, no dispatching logic).
+Without it, tools like `curl`, `git`, `python` won't be in PATH.
 
 ```dockerfile
 # ✅ CORRECT
@@ -59,10 +84,15 @@ RUN python -m pip install package
 
 When changing dependencies or Dockerfile:
 
-1. **Test locally BEFORE committing:**
+1. **Test locally BEFORE committing (both images):**
    ```bash
-   docker build --platform linux/amd64 -t ml-platform:test .
-   docker run --rm ml-platform:test <command-to-verify>
+   docker build --platform linux/amd64 \
+     --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+     --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+   docker build --platform linux/amd64 \
+     --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+     --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
+   docker run --rm ml-platform-cpu:test <command-to-verify>
    ```
 
 2. **Commit related files together:**
@@ -103,17 +133,19 @@ See `CONTRIBUTING.md` for detailed versioning documentation.
 The `.github/workflows/build-images.yaml` builds the image on every trigger.
 
 **Key points:**
-- No matrix - all configuration is inlined
-- Context is `.` (repo root), dockerfile is `./Dockerfile`
+- A 2-entry `strategy.matrix` (`gpu`, `cpu`) builds both images from the same `Dockerfile`, varying
+  `BASE_IMAGE` and `PIXI_ENVIRONMENT` build-args per matrix entry
+- Context is `.` (repo root), dockerfile is `./Dockerfile` for both matrix entries
 - Uses CalVer tags for releases
+- `fail-fast: false` so a failure building one variant doesn't cancel the other
 
 **Build triggers:**
-- **Push to main:** Build image, push with tags `latest`, `sha-abc1234`
-- **Git tag `v*`:** Build image, push with tags `YYYY.M.D`, `YYYY.MM`, `sha-abc1234`
-- **Pull request:** Build image (validation only, no push)
-- **Manual dispatch:** Build image, push to registries
+- **Push to main:** Build both images, push each with tags `latest`, `sha-abc1234`
+- **Git tag `v*`:** Build both images, push each with tags `YYYY.M.D`, `YYYY.MM`, `sha-abc1234`
+- **Pull request:** Build both images (validation only, no push)
+- **Manual dispatch:** Build both images, push to registries
 
-**Tag behavior:**
+**Tag behavior** (per image — `ml-platform-gpu` and `ml-platform-cpu` are tagged identically):
 
 | Trigger | Tags |
 |---------|------|
@@ -140,38 +172,51 @@ The `.github/workflows/build-images.yaml` builds the image on every trigger.
 - CI failures waste time; test locally first
 
 ❌ **Adding dependencies to wrong feature**
-- Use `[feature.ml.dependencies]` for production packages
+- Use `[feature.mlbase.dependencies]` for packages needed by both `ml` and `mlcpu`
+- Use `[feature.mlgpu.dependencies]` / `[feature.mlcpu.dependencies]` for environment-specific packages
 - Use `[feature.dev.dependencies]` for development tools
-- Use `[feature.ml.pypi-dependencies]` for PyPI-only production packages
+- Use `[feature.mlbase.pypi-dependencies]` for PyPI-only shared production packages
+
+❌ **Testing only one image variant**
+- The `ml-platform-gpu` and `ml-platform-cpu` images build independently from different `BASE_IMAGE`
+  build-args; a change that works for one can break the other (different pixi version in the base
+  image, different available system packages, etc.) — build and test both.
 
 ### 8. Testing Requirements
 
 Before committing changes that affect Docker builds:
 
-1. **Build succeeds:**
+1. **Both images build:**
    ```bash
-   docker build --platform linux/amd64 -t ml-platform:test .
+   docker build --platform linux/amd64 \
+     --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+     --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+   docker build --platform linux/amd64 \
+     --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+     --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
    ```
 
 2. **Environment activates:**
    ```bash
-   docker run --rm ml-platform:test python --version
+   docker run --rm ml-platform-cpu:test python --version
    ```
 
 3. **Key packages import:**
    ```bash
-   docker run --rm ml-platform:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
-   docker run --rm ml-platform:test root --version
-   docker run --rm ml-platform:test jupyter --version
+   docker run --rm ml-platform-cpu:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
+   docker run --rm ml-platform-cpu:test root --version
+   docker run --rm ml-platform-cpu:test jupyter --version
    ```
+   Repeat with `ml-platform-gpu:test` (the GPU image will only actually exercise the GPU path on a
+   host with a compatible NVIDIA driver and `--gpus all`).
 
 ### 9. Repository State Awareness
 
 **Key files to check before making changes:**
-- `.github/workflows/build-images.yaml` - workflow configuration
-- `pixi.toml` - dependency definitions with ml and dev features
+- `.github/workflows/build-images.yaml` - workflow configuration (matrix: gpu/cpu)
+- `pixi.toml` - dependency definitions: `mlbase`/`mlgpu`/`mlcpu`/`dev` features, `ml`/`mlcpu`/`dev` environments
 - `pixi.lock` - locked versions (DO NOT MODIFY MANUALLY)
-- `Dockerfile` - build instructions (uses ml environment)
+- `Dockerfile` - single parameterized build (`BASE_IMAGE`, `PIXI_ENVIRONMENT` build-args), used for both images
 - `config/jupyter_notebook_config.py` - Jupyter configuration
 - `config/SetupPrivateJupyterLab.sh` - JupyterLab setup script
 - `tbump.toml` - version bumping configuration
@@ -179,13 +224,14 @@ Before committing changes that affect Docker builds:
 
 ### 10. Build Behavior
 
-The workflow builds the image on every trigger for simplicity and consistency.
+The workflow builds **both** `ml-platform-gpu` and `ml-platform-cpu` on every trigger, via a matrix,
+for simplicity and consistency.
 
 **Build triggers:**
-- **Push to main:** Build and push with `latest` and SHA tags
-- **Git tag `v*`:** Build and push with CalVer tags (YYYY.M.D, YYYY.MM) and SHA tags
-- **Pull request:** Build for validation (no push)
-- **Manual dispatch:** Build and push
+- **Push to main:** Build and push both images with `latest` and SHA tags
+- **Git tag `v*`:** Build and push both images with CalVer tags (YYYY.M.D, YYYY.MM) and SHA tags
+- **Pull request:** Build both images for validation (no push)
+- **Manual dispatch:** Build and push both images
 
 **No change detection:** The workflow intentionally does not use path filters. This simplifies maintenance and ensures builds stay consistent.
 
@@ -230,17 +276,24 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 # Generate/update pixi lock file
 CONDA_OVERRIDE_CUDA=12.6 pixi install
 
-# Test local build
-docker build --platform linux/amd64 -t ml-platform:test .
+# Test local build (GPU image)
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+
+# Test local build (CPU image)
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Run verification tests
-docker run --rm ml-platform:test <command>
+docker run --rm ml-platform-cpu:test <command>
 
 # Interactive shell for debugging
-docker run --rm -it ml-platform:test bash
+docker run --rm -it ml-platform-cpu:test bash
 
 # Check pixi environment
-docker run --rm ml-platform:test pixi list
+docker run --rm ml-platform-cpu:test pixi list
 
 # View current git status
 git status
