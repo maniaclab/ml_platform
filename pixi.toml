@@ -4,7 +4,7 @@ version = "2026.5.15"
 description = "MaNIAC Lab ML platform environment"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
-requires-pixi = ">=0.68.0"
+requires-pixi = ">=0.76.2"  # https://github.com/maniaclab/ml_platform/issues/8
 exclude-newer = "7d"
 
 [feature.mlbase]
