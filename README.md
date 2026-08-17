@@ -2,14 +2,29 @@
 
 Machine learning platform with Python 3.12, TensorFlow, Keras, ROOT, Jupyter, and HEP tools. Docker image repository for the MaNIAC Lab ML platform using Pixi for dependency management and GitHub Actions CI/CD.
 
-## Registries
+## Two Images: GPU and CPU
 
-**Available registries:**
-- `ghcr.io/maniaclab/ml-platform`
-- `docker.io/ivukotic/ml_platform`
-- `hub.opensciencegrid.org/usatlas/ml-platform`
+This project ships **two separate images**, built from the same `Dockerfile` and `pixi.toml` but with
+different base images and pixi environments:
 
-**Base:** `ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0` (Ubuntu 24.04 + CUDA 13.0)
+| Image | Base image | Pixi environment | Use when |
+|---|---|---|---|
+| `ml-platform-gpu` | `ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0` (Ubuntu 24.04 + CUDA 13.0) | `ml` (TensorFlow GPU) | Running on a node with a compatible NVIDIA GPU/driver |
+| `ml-platform-cpu` | `ghcr.io/prefix-dev/pixi:noble` (Ubuntu 24.04, no CUDA) | `mlcpu` (TensorFlow CPU) | Running anywhere else |
+
+The CPU image intentionally does **not** use a CUDA base image, even though CUDA packages aren't
+installed into its pixi environment: CUDA base images bake `NVIDIA_REQUIRE_CUDA` into `ENV`, which
+container runtimes configured with `default-runtime: nvidia` enforce as a driver-version check on
+every container — even ones that never request a GPU. Building the CPU image from a plain base avoids
+that failure mode entirely, rather than working around it after the fact.
+
+Pick the image that matches where you're deploying; there is no runtime GPU-detection or environment
+switching inside either image.
+
+**Available registries** (each image is pushed to all three, with a `-gpu`/`-cpu` suffix):
+- `ghcr.io/maniaclab/ml-platform-gpu` / `ghcr.io/maniaclab/ml-platform-cpu`
+- `docker.io/ivukotic/ml_platform-gpu` / `docker.io/ivukotic/ml_platform-cpu`
+- `hub.opensciencegrid.org/usatlas/ml-platform-gpu` / `hub.opensciencegrid.org/usatlas/ml-platform-cpu`
 
 **Platforms:** linux/amd64
 
@@ -17,13 +32,16 @@ Machine learning platform with Python 3.12, TensorFlow, Keras, ROOT, Jupyter, an
 
 ```bash
 # From GitHub Container Registry
-docker pull ghcr.io/maniaclab/ml-platform:latest
+docker pull ghcr.io/maniaclab/ml-platform-gpu:latest
+docker pull ghcr.io/maniaclab/ml-platform-cpu:latest
 
 # From Docker Hub
-docker pull ivukotic/ml_platform:latest
+docker pull ivukotic/ml_platform-gpu:latest
+docker pull ivukotic/ml_platform-cpu:latest
 
 # From OSG Harbor
-docker pull hub.opensciencegrid.org/usatlas/ml-platform:latest
+docker pull hub.opensciencegrid.org/usatlas/ml-platform-gpu:latest
+docker pull hub.opensciencegrid.org/usatlas/ml-platform-cpu:latest
 ```
 
 ## Usage
@@ -31,13 +49,13 @@ docker pull hub.opensciencegrid.org/usatlas/ml-platform:latest
 ### Run Interactive Shell
 
 ```bash
-docker run --rm -it ghcr.io/maniaclab/ml-platform:latest bash
+docker run --rm -it ghcr.io/maniaclab/ml-platform-cpu:latest bash
 ```
 
 ### Run Jupyter Lab
 
 ```bash
-docker run --rm -p 9999:9999 ghcr.io/maniaclab/ml-platform:latest jupyter lab --ip=0.0.0.0 --port=9999
+docker run --rm -p 9999:9999 ghcr.io/maniaclab/ml-platform-cpu:latest jupyter lab --ip=0.0.0.0 --port=9999
 ```
 
 Then open http://localhost:9999 in your browser.
@@ -45,20 +63,20 @@ Then open http://localhost:9999 in your browser.
 ### Run with GPU Support
 
 ```bash
-docker run --rm --gpus all -it ghcr.io/maniaclab/ml-platform:latest python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+docker run --rm --gpus all -it ghcr.io/maniaclab/ml-platform-gpu:latest python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
 
 ### Mount Data Volume
 
 ```bash
-docker run --rm -v /path/to/data:/data -it ghcr.io/maniaclab/ml-platform:latest bash
+docker run --rm -v /path/to/data:/data -it ghcr.io/maniaclab/ml-platform-cpu:latest bash
 ```
 
 ### Singularity/Apptainer
 
 ```bash
-singularity pull docker://ghcr.io/maniaclab/ml-platform:latest
-singularity run ml-platform_main.sif python --version
+singularity pull docker://ghcr.io/maniaclab/ml-platform-cpu:latest
+singularity run ml-platform-cpu_latest.sif python --version
 ```
 
 ## Dependencies
@@ -79,6 +97,11 @@ All dependencies are managed via Pixi (conda-forge + PyPI). See [`pixi.toml`](pi
 
 All packages are managed via Pixi and activated automatically via the entrypoint. No need to source activation scripts.
 
+Each image bakes in exactly one pixi environment (`ml` for `ml-platform-gpu`, `mlcpu` for
+`ml-platform-cpu`), both built from the same shared `mlbase` dependency set. `/app/entrypoint.sh` is
+just the `pixi shell-hook` output for that one environment — there is no runtime detection or
+switching. `PIXI_KERNEL_DEFAULT_ENVIRONMENT` is baked in too, so notebook kernels default correctly.
+
 ### Jupyter Configuration
 
 - Binds to `0.0.0.0:9999` by default
@@ -87,9 +110,10 @@ All packages are managed via Pixi and activated automatically via the entrypoint
 
 ### GPU Support
 
-- CUDA 13.0 base image
-- Singularity/Apptainer GPU driver compatibility via `/host-libs/` mount
-- TensorFlow compiled with GPU support
+- `ml-platform-gpu` uses a CUDA 13.0 base image and TensorFlow compiled with GPU support
+- `ml-platform-cpu` uses a plain (non-CUDA) base image and plain CPU TensorFlow — it has no
+  `NVIDIA_REQUIRE_CUDA` baked in, so it runs cleanly on any host regardless of driver version
+- Singularity/Apptainer GPU driver compatibility via `/host-libs/` mount (GPU image)
 
 ### User Management
 
@@ -109,34 +133,53 @@ All dependencies (system packages, Python libraries, compilers, ROOT) are manage
 
 ### Multi-Stage Docker Build
 
-```dockerfile
-# Stage 1: Build - install dependencies via pixi
-FROM ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 AS build
-RUN pixi install --locked
-RUN pixi shell-hook > entrypoint.sh
+A single `Dockerfile`, parameterized by `BASE_IMAGE` and `PIXI_ENVIRONMENT` build-args, produces both
+images:
 
-# Stage 2: Final - copy environment only
-FROM ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 AS final
-COPY --from=build /app/.pixi/envs/default /app/.pixi/envs/default
+```dockerfile
+ARG BASE_IMAGE="ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0"
+ARG PIXI_ENVIRONMENT="ml"
+
+# Stage 1: Build - install the requested environment via pixi, generate its activation script
+FROM ${BASE_IMAGE} AS build
+RUN pixi install --locked --environment $PIXI_ENVIRONMENT
+# pixi shell-hook output -> /app/entrypoint.sh
+
+# Stage 2: Final - copy just that one environment
+FROM ${BASE_IMAGE} AS final
+COPY --from=build /app/.pixi/envs/$PIXI_ENVIRONMENT /app/.pixi/envs/$PIXI_ENVIRONMENT
 COPY --from=build /app/entrypoint.sh /app/entrypoint.sh
 ```
 
+```bash
+# GPU image
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu .
+
+# CPU image
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu .
+```
+
 **Key Points:**
-- Pixi shell-hook generates entrypoint that activates environment
-- All RUN commands in final stage use `/app/entrypoint.sh` prefix
-- Singularity/Apptainer compatible via `/host-libs/` mount point
+- `/app/entrypoint.sh` is plain `pixi shell-hook` output — no dispatching, no runtime GPU detection
+- The generated script also exports `PIXI_KERNEL_DEFAULT_ENVIRONMENT` so notebook kernels default
+  to the environment actually shipped in the image
+- All RUN commands in the final stage use `/app/entrypoint.sh` to activate the environment
+- Singularity/Apptainer compatible via `/host-libs/` mount point (GPU image)
 
 ### CI/CD Workflow
 
-The workflow builds and pushes the image on every trigger:
+The workflow builds and pushes **both** images on every trigger, via a 2-entry build matrix
+(`gpu`/`cpu`):
 
 **Triggers:**
-- **Push to `main`:** Build image → push with tags `latest`, `sha-abc1234`
-- **Git tag `v*`:** Build image → push with tags `X.Y.Z`, `X.Y`, `sha-abc1234`
-- **Pull request:** Build image (no push, validation only)
-- **Manual:** `workflow_dispatch` builds and pushes image
+- **Push to `main`:** Build both images → push each with tags `latest`, `sha-abc1234`
+- **Git tag `v*`:** Build both images → push each with tags `X.Y.Z`, `X.Y`, `sha-abc1234`
+- **Pull request:** Build both images (no push, validation only)
+- **Manual:** `workflow_dispatch` builds and pushes both images
 
-**Tag behavior:**
+**Tag behavior** (identical for `ml-platform-gpu` and `ml-platform-cpu`):
 
 | Trigger | Tags |
 |---------|------|
@@ -159,9 +202,12 @@ Authenticated via GitHub secrets:
    ```bash
    CONDA_OVERRIDE_CUDA=12.6 pixi install
    ```
-3. Test locally:
+3. Test locally (both images):
    ```bash
-   docker build -t ml-platform:test .
+   docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+     --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+   docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+     --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
    ```
 4. Commit both files:
    ```bash
@@ -172,23 +218,30 @@ Authenticated via GitHub secrets:
 ### Testing Locally
 
 ```bash
-# Build
-docker build --platform linux/amd64 -t ml-platform:test .
+# Build both images
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --platform linux/amd64 \
+  --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Test Python
-docker run --rm ml-platform:test python --version
+docker run --rm ml-platform-cpu:test python --version
 
 # Test ML packages
-docker run --rm ml-platform:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
+docker run --rm ml-platform-cpu:test python -c "import tensorflow, keras, numpy, pandas; print('OK')"
 
 # Test ROOT
-docker run --rm ml-platform:test root --version
+docker run --rm ml-platform-cpu:test root --version
 
 # Test Jupyter
-docker run --rm ml-platform:test jupyter --version
+docker run --rm ml-platform-cpu:test jupyter --version
 
 # Test HEP tools
-docker run --rm ml-platform:test python -c "import uproot, atlasify; print('OK')"
+docker run --rm ml-platform-cpu:test python -c "import uproot, atlasify; print('OK')"
+
+# Repeat against ml-platform-gpu:test, ideally with --gpus all on a GPU host
 ```
 
 ### Releasing a Version
@@ -221,11 +274,13 @@ This triggers a full build with Docker tags:
 
 ### Updating Base Image
 
-The base image `ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0` should be updated periodically:
+The base images (`ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0` for GPU, `ghcr.io/prefix-dev/pixi:noble`
+for CPU) should be updated periodically:
 
 1. Check for newer versions: https://github.com/prefix-dev/pixi-docker/pkgs/container/pixi
-2. Update `FROM` lines in Dockerfile
-3. Test locally
+2. Update the `ARG BASE_IMAGE` default in `Dockerfile`, and the matching `base_image` value in
+   `.github/workflows/build-images.yaml`'s matrix — for whichever variant(s) changed
+3. Test both images locally
 4. Commit and push
 
 ### Updating Dependencies
@@ -239,8 +294,11 @@ vim pixi.toml
 # Regenerate lock file
 CONDA_OVERRIDE_CUDA=12.6 pixi install
 
-# Test
-docker build -t ml-platform:test .
+# Test both images
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0 \
+  --build-arg PIXI_ENVIRONMENT=ml -t ml-platform-gpu:test .
+docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
+  --build-arg PIXI_ENVIRONMENT=mlcpu -t ml-platform-cpu:test .
 
 # Commit both files
 git add pixi.toml pixi.lock
@@ -295,19 +353,22 @@ If you get `ModuleNotFoundError`, ensure the package is in `pixi.toml`:
 
 ### GPU Not Detected
 
+Make sure you pulled `ml-platform-gpu`, not `ml-platform-cpu` — the CPU image has no GPU support at all
+by design.
+
 ```bash
 # Check CUDA is visible
-docker run --rm --gpus all ghcr.io/maniaclab/ml-platform:latest nvidia-smi
+docker run --rm --gpus all ghcr.io/maniaclab/ml-platform-gpu:latest nvidia-smi
 
 # Check TensorFlow GPU support
-docker run --rm --gpus all ghcr.io/maniaclab/ml-platform:latest python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+docker run --rm --gpus all ghcr.io/maniaclab/ml-platform-gpu:latest python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
 
 ### Singularity GPU Issues
 
 Ensure `/host-libs/` is bound to host driver paths:
 ```bash
-singularity run --nv --bind /usr/lib/x86_64-linux-gnu:/host-libs ml-platform_main.sif
+singularity run --nv --bind /usr/lib/x86_64-linux-gnu:/host-libs ml-platform-gpu_latest.sif
 ```
 
 ## References
