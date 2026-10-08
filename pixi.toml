@@ -3,7 +3,13 @@ name = "ml-platform"
 version = "2026.5.15"
 description = "MaNIAC Lab ML platform environment"
 channels = ["conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+platforms = [
+  "linux-64",
+  "linux-aarch64",
+  "osx-64",
+  "osx-arm64",
+  { name = "linux-64-cuda", platform = "linux-64", cuda = "13.0" },
+]
 requires-pixi = ">=0.76.2"  # https://github.com/maniaclab/ml_platform/issues/8
 exclude-newer = "7d"
 
@@ -96,11 +102,11 @@ tqdm = "*"
 # Packages NOT on conda-forge (or easier from PyPI)
 jupyter-mcp-server = ">=1.0.0"
 
-[feature.mlgpu.system-requirements]
-cuda = "13.0"
-
 [feature.mlcpu.dependencies]
 tensorflow = "*"
+
+[feature.mlgpu]
+platforms = ["linux-64-cuda"]
 
 [feature.mlgpu.dependencies]
 tensorflow-gpu = "*"
