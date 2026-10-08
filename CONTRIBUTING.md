@@ -34,8 +34,8 @@ Dependencies are managed via Pixi and split into features:
 
 - **mlbase feature** (production, shared): All ML packages, ROOT, Jupyter, etc. Used by both the `ml`
   (GPU) and `mlcpu` (CPU) environments.
-- **mlgpu / mlcpu features**: environment-specific bits layered on top of `mlbase` — `mlgpu` adds the
-  `cuda = "13.0"` system-requirement and `tensorflow-gpu`; `mlcpu` adds plain `tensorflow`.
+- **mlgpu / mlcpu features**: environment-specific bits layered on top of `mlbase` — `mlgpu` is bound to
+  the named `linux-64-cuda` workspace platform (`cuda = "13.0"`) and adds `tensorflow-gpu`; `mlcpu` adds plain `tensorflow`.
 - **dev feature** (development): tbump and other dev tools
 
 The repository builds **two separate images** from the same `Dockerfile` and `pixi.toml`, via

@@ -30,10 +30,10 @@ The repository builds **two separate images** from the same `Dockerfile` and `pi
 by build args:
 
 - **`ml-platform-gpu`**: `BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble-cuda-13.0.0`,
-  `PIXI_ENVIRONMENT=ml` (feature `mlbase` + `mlgpu`; declares `cuda = "13.0"` as a
-  `system-requirements`, depends on `tensorflow-gpu`).
+  `PIXI_ENVIRONMENT=ml` (feature `mlbase` + `mlgpu`; `mlgpu` is bound to the named
+  `linux-64-cuda` workspace platform declaring `cuda = "13.0"`, depends on `tensorflow-gpu`).
 - **`ml-platform-cpu`**: `BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble` (no CUDA in the base image at all),
-  `PIXI_ENVIRONMENT=mlcpu` (feature `mlbase` + `mlcpu`; no `cuda` system-requirement, depends on plain
+  `PIXI_ENVIRONMENT=mlcpu` (feature `mlbase` + `mlcpu`; plain `linux-64` platform with no `cuda`, depends on plain
   `tensorflow`).
 - **dev environment** (development, not shipped in either image): Python 3.11, tbump for versioning.
   Used locally for version management.
