@@ -285,6 +285,27 @@ git add config/your_config.py Dockerfile
 git commit -m "feat: add your_config configuration"
 ```
 
+### Change the Enabled MCP Frontend Tools
+
+The JupyterLab commands exposed as MCP tools by `jupyter-mcp-tools` are allowlisted in
+`config/jupyter_notebook_config.py` (`c.JupyterMCPServerExtensionApp.allowed_jupyter_mcp_tools`). Tool
+ids are JupyterLab command ids with `:` replaced by `_` (e.g. `notebook:run-all-cells` →
+`notebook_run-all-cells`); see the
+[upstream tool list](https://github.com/datalayer/jupyter-mcp-tools/blob/main/README.md#available-tools),
+but verify each id against the JupyterLab source — several ids in that list (e.g. `kernel_restart`,
+real id `kernelmenu:restart`) do not exist in JupyterLab, and allowlisting them silently does nothing.
+
+```bash
+vim config/jupyter_notebook_config.py  # add/remove ids in the allowlist
+
+# Test (both images), then commit
+git add config/jupyter_notebook_config.py
+git commit -m "feat: enable <tool> MCP frontend tool"
+```
+
+If you change the list, also update the matching `nb_ui_*` proxy tools in
+[af-jupyterlab-mcp](https://github.com/maniaclab/af-jupyterlab-mcp) so the AF gateway exposes the same set.
+
 ## Getting Help
 
 - **Issues:** https://github.com/maniaclab/ml_platform/issues

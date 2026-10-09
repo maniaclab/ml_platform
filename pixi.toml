@@ -100,7 +100,8 @@ tqdm = "*"
 
 [feature.mlbase.pypi-dependencies]
 # Packages NOT on conda-forge (or easier from PyPI)
-jupyter-mcp-server = ">=1.0.0"
+jupyter-mcp-server = ">=2.2.3,<3"
+jupyter-mcp-tools = ">=0.1.8"
 
 [feature.mlcpu.dependencies]
 tensorflow = "*"

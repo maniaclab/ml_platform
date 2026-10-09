@@ -108,6 +108,22 @@ switching. `PIXI_KERNEL_DEFAULT_ENVIRONMENT` is baked in too, so notebook kernel
 - Password change disabled (for container security)
 - Browser auto-open disabled
 
+### MCP Server
+
+[`jupyter-mcp-server`](https://github.com/datalayer/jupyter-mcp-server) runs as a Jupyter server
+extension at `/mcp`, so MCP clients can read, edit and execute notebooks. The companion
+[`jupyter-mcp-tools`](https://github.com/datalayer/jupyter-mcp-tools) extension additionally exposes
+JupyterLab UI commands (cell selection, run-all, console, kernel, file browser, ...) as MCP tools.
+
+- Frontend (UI) tools execute inside the user's open JupyterLab browser tab — they fail if no tab is open
+- The enabled set is the `allowed_jupyter_mcp_tools` list in
+  [`config/jupyter_notebook_config.py`](config/jupyter_notebook_config.py)
+- `filebrowser_upload` / `filebrowser_download` are intentionally not enabled: they act on the human's
+  browser (file picker / save dialog) and never transfer files to the MCP client
+- `docmanager_delete` / `docmanager_rename` / `docmanager_save-as`, `kernelmenu_change`,
+  `kernelmenu_restart` and `console_restart-kernel` are intentionally not enabled: they block on a modal
+  dialog that needs a human click
+
 ### GPU Support
 
 - `ml-platform-gpu` uses a CUDA 13.0 base image and TensorFlow compiled with GPU support
