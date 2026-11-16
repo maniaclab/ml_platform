@@ -181,6 +181,9 @@ docker build --build-arg BASE_IMAGE=ghcr.io/prefix-dev/pixi:noble \
 - `/app/entrypoint.sh` is plain `pixi shell-hook` output — no dispatching, no runtime GPU detection
 - The generated script also exports `PIXI_KERNEL_DEFAULT_ENVIRONMENT` so notebook kernels default
   to the environment actually shipped in the image
+- It also defaults `PIXI_CACHE_DIR` to `/tmp/pixi-cache-<uid>`, so `pixi add`/`pixi lock`/`pixi install`
+  run from a notebook don't hang on package-cache locks in an NFS home (override by setting
+  `PIXI_CACHE_DIR` yourself)
 - All RUN commands in the final stage use `/app/entrypoint.sh` to activate the environment
 - Singularity/Apptainer compatible via `/host-libs/` mount point (GPU image)
 

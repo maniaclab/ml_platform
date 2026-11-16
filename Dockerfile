@@ -16,6 +16,14 @@ ENV CONDA_OVERRIDE_CUDA=$CUDA_VERSION
 RUN pixi install --manifest-path /app/pixi.toml --locked --environment $PIXI_ENVIRONMENT
 
 # Generate entrypoint from pixi shell-hook
+#
+# PIXI_CACHE_DIR defaults to a per-uid directory under /tmp: notebook homes are
+# often NFS, and pixi keeps its package cache (with per-package lock files)
+# under ~/.cache/rattler, where `pixi add`/`pixi lock`/`pixi install` can block
+# indefinitely waiting on a lock. pixi's default netfs redirect only moves
+# the repodata and pypi-mapping caches, leaving the package cache on NFS.
+# The uid suffix keeps users apart when /tmp is shared (e.g. Apptainer binds
+# the host /tmp); a PIXI_CACHE_DIR set by the caller still wins.
 RUN echo "#!/bin/bash" > /app/entrypoint.sh && \
     echo "export PYTHONNOUSERSITE=1" >> /app/entrypoint.sh && \
     echo "JUPYTER_CONFIG_DIR=/app/.jupyter/config" >> /app/entrypoint.sh && \
@@ -24,6 +32,7 @@ RUN echo "#!/bin/bash" > /app/entrypoint.sh && \
     pixi shell-hook --manifest-path /app/pixi.toml \
                     --environment $PIXI_ENVIRONMENT -s bash >> /app/entrypoint.sh && \
     echo 'export PIXI_KERNEL_DEFAULT_ENVIRONMENT="$PIXI_ENVIRONMENT_NAME"' >> /app/entrypoint.sh && \
+    echo 'export PIXI_CACHE_DIR="${PIXI_CACHE_DIR:-/tmp/pixi-cache-$(id -u)}"' >> /app/entrypoint.sh && \
     echo 'exec "$@"' >> /app/entrypoint.sh
 
 # ============================================================
